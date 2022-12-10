@@ -84,13 +84,23 @@ def forward_and_cache_response(sockf, fileCachePath, clisockf):
         # We will close all connections after sending the response.
         # This is an inefficient,  single-threaded proxy!
         headers.append(('Connection', 'close'))
+        
         # Fill in start.
+        
+        # Initialize data buffer with response status line, each line ends with '\r\n'
         data = statusLine + '\r\n'
+
+        # Add rest of response headers and their corresponding values to the data buffer
         for header in headers:
             data += header[0] + ": " + header[1] + '\r\n'
-        print(data)
+        
+        # Encode and write data to socket file object connected to the client
         clisockf.write(data.encode())
+        
+        sockf.close()
+        clisockf.close()
         # Fill in end.
+        
     except Exception as e:
         print(e)
     finally:
@@ -108,12 +118,19 @@ def forward_request(sockf, requestUri, hostn, origRequestLine, origHeaders):
     headers = [h for h in origHeaders if h[0] != 'Host']
     headers.append(('Host', hostn))
     # Send request to the server
+    
     # Fill in start.
+    
+    # Initialize data buffer with headline, each line ends with '\r\n'
     data = origRequestLine + '\r\n'
+    
+    # Add rest of headers and their corresponding values to the data buffer
     for header in headers:
         data += header[0] + ": " + header[1] + '\r\n'
-    print(data)
+        
+    # Encode and write data to socket file object connected to server
     sockf.write(data.encode())
+    
     # Fill in end.
 
 def proxyServer(port):
@@ -181,8 +198,12 @@ def proxyServer(port):
                     try:
                         # Connect to the socket
                         # Fill in start.
-                        addressInfo = hostn.partition(':')
-                        c.connect((addressInfo[0], int(addressInfo[2].strip())))
+                        
+                        # Separate server address and server port number from hostn
+                        serverAddress = hostn.partition(':')
+                        
+                        # Connect to server socket
+                        c.connect((serverAddress[0], int(serverAddress[2])))
                         # Fill in end.
 
                         # Create a temporary file on this socket and ask port 80 for the file requested by the client
@@ -191,6 +212,7 @@ def proxyServer(port):
 
                         # Read the response from the server, cache, and forward it to client
                         forward_and_cache_response(fileobj, fileCachePath, cliSock_f)
+                        
                     except Exception as e:
                         print(e)
                     finally:
