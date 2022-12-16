@@ -74,11 +74,11 @@ def parse_http_headers(sockf):
 # sockf: Socket file object connected to server
 # fileCachePath: Path to cache file
 # clisockf: Socket file object connected to client
-def forward_and_cache_response(sockf, fileCachePath, clisockf):
+def forward_and_cache_response(sockf, fileCachePath, clisockf, requestMethod):
     cachef = None
 
     # Create the intermediate directories to the cache file
-    if fileCachePath is not None:
+    if fileCachePath is not None and requestMethod == "GET":
         os.makedirs(os.path.dirname(fileCachePath), exist_ok=True)
         # Open/create cache file
         cachef = open(fileCachePath, 'w+b')
@@ -107,7 +107,9 @@ def forward_and_cache_response(sockf, fileCachePath, clisockf):
         
         # Encode and write data to socket file object connected to the client        
         response = data + content
-        cachef.write(response.encode())
+        
+        if requestMethod == 'GET': cachef.write(response.encode())
+        
         clisockf.write(response.encode())
         # Fill in end.
         
@@ -170,14 +172,16 @@ def proxyServer(port):
 
             # Read and parse request from client
             requestLine, requestHeaders, requestContent = parse_http_headers(cliSock_f)
-            print(requestLine)
 
             if len(requestLine) == 0:
                 continue
 
             # Extract the request URI from the given message
             requestUri = requestLine.split()[1]
-            print(requestUri)
+            
+            # Extract request method from request line
+            requestMethod = requestLine.split()[0]
+            
             # if a scheme is included, split off the scheme, otherwise split off a leading slash
             uri_parts = requestUri.partition('http://')
             if uri_parts[1] == '':
@@ -229,7 +233,7 @@ def proxyServer(port):
                         forward_request(fileobj, f'/{filename.partition("/")[2]}', hostn, requestLine, requestHeaders, requestContent)
 
                         # Read the response from the server, cache, and forward it to client
-                        forward_and_cache_response(fileobj, fileCachePath, cliSock_f)
+                        forward_and_cache_response(fileobj, fileCachePath, cliSock_f, requestMethod)
                         
                     except Exception as e:
                         print(e)
