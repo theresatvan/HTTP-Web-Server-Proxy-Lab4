@@ -47,6 +47,7 @@ def parse_http_headers(sockf):
     while True:
         # Read a line at a time
         header = interruptible_readline(sockf).decode()
+        
         # If it's the empty line '\r\n', it's the end of the header section
         if len(header.rstrip('\r\n')) == 0:
             break
@@ -59,8 +60,15 @@ def parse_http_headers(sockf):
             continue
 
         headers.append((headerPartitions[0].strip(), headerPartitions[2].strip()))
+        
+    ### Read contents if Content-Length header exists
+    content = ""
+    
+    if any(['Content-Length' in header for header in headers]):
+        contentLength = [val for header, val in headers if header == 'Content-Length']
+        content += interruptible_read(sockf, int(contentLength[0])).decode()
 
-    return(headline, headers)
+    return(headline, headers, content)
 
 # Forward a server response to the client and save to cache
 # sockf: Socket file object connected to server
@@ -77,7 +85,7 @@ def forward_and_cache_response(sockf, fileCachePath, clisockf):
 
     try:
         # Read response from server
-        statusLine, headers = parse_http_headers(sockf)
+        statusLine, headers, content = parse_http_headers(sockf)
         # Filter out the Connection header from the server
         headers = [h for h in headers if h[0] != 'Connection']
         # Replace with our own Connection header
@@ -94,11 +102,13 @@ def forward_and_cache_response(sockf, fileCachePath, clisockf):
         for header in headers:
             data += header[0] + ": " + header[1] + '\r\n'
         
-        # Encode and write data to socket file object connected to the client
-        clisockf.write(data.encode())
+        # Mark end of data
+        data += '\r\n'
         
-        sockf.close()
-        clisockf.close()
+        # Encode and write data to socket file object connected to the client        
+        response = data + content
+        cachef.write(response.encode())
+        clisockf.write(response.encode())
         # Fill in end.
         
     except Exception as e:
@@ -113,7 +123,8 @@ def forward_and_cache_response(sockf, fileCachePath, clisockf):
 # hostn: The Host header value to include in the forwarded request
 # origRequestLine: The Request Line from the original client request
 # origHeaders: The HTTP headers from the original client request
-def forward_request(sockf, requestUri, hostn, origRequestLine, origHeaders):
+# origContent: The Contents from the original client request
+def forward_request(sockf, requestUri, hostn, origRequestLine, origHeaders, origContent):
     # Filter out the original Host header and replace it with our own
     headers = [h for h in origHeaders if h[0] != 'Host']
     headers.append(('Host', hostn))
@@ -127,7 +138,10 @@ def forward_request(sockf, requestUri, hostn, origRequestLine, origHeaders):
     # Add rest of headers and their corresponding values to the data buffer
     for header in headers:
         data += header[0] + ": " + header[1] + '\r\n'
-        
+    
+    # Mark end of data
+    data += '\r\n' + origContent
+
     # Encode and write data to socket file object connected to server
     sockf.write(data.encode())
     
@@ -155,7 +169,7 @@ def proxyServer(port):
             cliSock_f = tcpCliSock.makefile('rwb', 0)
 
             # Read and parse request from client
-            requestLine, requestHeaders = parse_http_headers(cliSock_f)
+            requestLine, requestHeaders, requestContent = parse_http_headers(cliSock_f)
             print(requestLine)
 
             if len(requestLine) == 0:
@@ -176,8 +190,8 @@ def proxyServer(port):
             if len(filename) > 0:
                 # Compute the path to the cache file from the request URI
                 # Change for Part Three
-                fileCachePath = None
-                cached = False
+                fileCachePath = 'cacheDir/' + filename.partition('/')[2]
+                cached = os.path.exists(fileCachePath)
                 
                 print(f'fileCachePath: {fileCachePath}')
 
@@ -185,6 +199,10 @@ def proxyServer(port):
                 if fileCachePath is not None and cached:
                     # Read response from cache and transmit to client
                     # Fill in start.
+                    cacheFile = open(fileCachePath, 'rb')
+                    cacheContent = cacheFile.read()
+                    print(cacheContent.decode())
+                    cliSock_f.write(cacheContent)
                     # Fill in end.
                     print('Read from cache')
                 else:
@@ -208,7 +226,7 @@ def proxyServer(port):
 
                         # Create a temporary file on this socket and ask port 80 for the file requested by the client
                         fileobj = c.makefile('rwb', 0)
-                        forward_request(fileobj, f'/{filename.partition("/")[2]}', hostn, requestLine, requestHeaders)
+                        forward_request(fileobj, f'/{filename.partition("/")[2]}', hostn, requestLine, requestHeaders, requestContent)
 
                         # Read the response from the server, cache, and forward it to client
                         forward_and_cache_response(fileobj, fileCachePath, cliSock_f)

@@ -21,7 +21,7 @@ def reflect(input_string):
 @app.route("/post", methods=['POST'])
 def reflect_post():
     input_string = request.form['input_string']
-
+    print(input_string)
     if input_string in reflect_count_dict:
         reflect_count_dict[input_string] += 1
     else:
