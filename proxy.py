@@ -38,7 +38,7 @@ def interruptible_read(fileObj, nbytes=-1):
 
 # Read an HTTP message from a socket file object and parse it
 # sockf: Socket file object to read from
-# Returns: (headline: str, [(header: str, header_value: str)])
+### Returns: (headline: str, [(header: str, header_value: str), content: str])
 def parse_http_headers(sockf):
     # Read the first line from the HTTP message
     # This will either be the Request Line (request) or the Status Line (response)
@@ -238,10 +238,11 @@ def proxyServer(port):
 
                         # Create a temporary file on this socket and ask port 80 for the file requested by the client
                         fileobj = c.makefile('rwb', 0)
+                        ### Pass client request content into parameters as well
                         forward_request(fileobj, f'/{filename.partition("/")[2]}', hostn, requestLine, requestHeaders, requestContent)
 
                         # Read the response from the server, cache, and forward it to client
-                        ### Pass client request method into parameter as well
+                        ### Pass client request method into parameters as well
                         forward_and_cache_response(fileobj, fileCachePath, cliSock_f, requestMethod)
                     except Exception as e:
                         print(e)
